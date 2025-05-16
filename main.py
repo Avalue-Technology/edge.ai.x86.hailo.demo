@@ -1,9 +1,12 @@
 
 import argparse
 import logging
+
 import sys
 import threading
 import time
+
+from concurrent.futures import Future, ThreadPoolExecutor
 
 import cv2
 
@@ -70,7 +73,7 @@ def main():
         cv2.setWindowProperty(
             windowname,
             cv2.WND_PROP_FULLSCREEN,
-            cv2.WINDOW_NORMAL
+            cv2.WINDOW_FULLSCREEN, 
         )
         
     if (is_async):
@@ -245,6 +248,18 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
     
     f_feed = True
     
+    pool = ThreadPoolExecutor()
+    
+    def __task_put_source(frame: cv2.typing.MatLike):
+        runtime.put(
+            InferenceSource(
+                frame,
+                confidence,
+                threshold,
+                time.time()
+            )
+        )
+    
     def __task_feed_video():
         capture = utils.read_video(filepath)
         
@@ -256,6 +271,8 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
             while not runtime.avaliable():
                 time.sleep(0.001)
                 continue
+            
+            pool.submit(__task_put_source, frame)
                 
             runtime.put(
                 InferenceSource(
@@ -292,11 +309,14 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
         if (is_monitor):
             monitor.add_count()
             monitor.add_spendtime(result.spendtime)
-            utils.drawmodelname(result.image, runtime.information.name)
-            utils.drawspendtime(result.image, monitor.spandtime)
-            utils.drawfps(result.image, monitor.framecount)
+
+            if (is_display):
+                utils.drawmodelname(result.image, runtime.information.name)
+                utils.drawspendtime(result.image, monitor.spandtime)
+                utils.drawfps(result.image, monitor.framecount)
         
         if (is_display):
+            
             cv2.imshow(windowname, result.image)
             key = cv2.waitKeyEx(1)
             if key == ord('q') or key == ord('Q'):
@@ -317,6 +337,7 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
     logger.info(f"wait for task ...")
     f_feed = False
     runtime.stop()
+    pool.shutdown(False)
     t_run.join(1)
     t_feed.join(1)
     logger.info(f"wait for task ok")
