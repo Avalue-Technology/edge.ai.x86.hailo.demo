@@ -1,18 +1,23 @@
 
 import argparse
 import logging
+import sys
+import threading
+import time
 
 import cv2
 
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 from sdk.commons import utils
 from sdk.commons.monitor import Monitor
 
-from sdk.runtime.hailort import Hailort
-from sdk.runtime.onnxrt import Onnxrt
-from sdk.runtime.tflitert import Tflitert
+from sdk.data.inference_source import InferenceSource
+
+from sdk import loadmodel, loadmodelasync
+
+from sdk.runtime.runtimeasync import RuntimeAsync
 from sdk.runtime.runtime import Runtime
 
 logging.basicConfig(
@@ -32,6 +37,7 @@ parser.add_argument("-t", "--threshold", type=int, default=50, help="nms filter 
 parser.add_argument("-d", "--display", action="store_true", help="display inference results")
 parser.add_argument("-l", "--loop", action="store_true", help="loop forever when input sample is video")
 parser.add_argument("-f", "--fps", action="store_true", help="monitor inference frame per second when input sample is video")
+parser.add_argument("--hailo-async", action="store_true", help="startup hailo module in async mode")
 
 args = parser.parse_args()
 
@@ -47,140 +53,12 @@ is_display = args.display
 is_loop = args.loop
 is_monitor = args.fps
 
+is_async = args.hailo_async
+
 logger.debug(f"is_display: {is_display}, is_loop: {is_loop}, is_monitor: {is_monitor}")
 logger.debug(f"samples: {sample_path} {sample_mjpeg}")
 
-monitor_label_scale = 0.5
-monitor_label_thickness = 1
-
 monitor = Monitor(Path(model_path).name)
-
-def loadonnx(onnxpath: str) -> Runtime:
-    return Onnxrt(onnxpath, is_display)
-
-def loadhef(hefpath: str) -> Runtime:
-    return Hailort(hefpath, is_display)
-
-def loadtflite(tflitepath: str) -> Runtime:
-    return Tflitert(tflitepath, is_display)
-
-def loadmodel(model_path: str) -> Runtime:
-    mp = Path(model_path)
-
-    if (mp.suffix.lower() == ".onnx"):
-        return loadonnx(model_path)
-        
-    elif (mp.suffix.lower() == ".hef"):
-        return loadhef(model_path)
-    
-    elif (mp.suffix.lower() == ".tflite"):
-        return loadtflite(model_path)
-    
-    raise ValueError(f"unsupport model type: {mp.suffix}")
-
-
-def drawmodelname(image: cv2.typing.MatLike, name: str) -> None:
-    image_height, image_width = image.shape[:2]
-    label: str = f"Model: {name}"
-    
-    (labelw, labelh), _ = cv2.getTextSize(
-        label,
-        cv2.FONT_HERSHEY_SIMPLEX,
-        utils.get_label_scale(image_width),
-        monitor_label_thickness,
-    )
-    
-    labelx = (image_width // 2) - (labelw // 2)
-    labely = image_height - labelh
-    
-    cv2.rectangle(
-        image,
-        (int(labelx), int(labely - labelh)),
-        (int(labelx + labelw), int(labely + labelh)),
-        (0, 255, 0),
-        cv2.FILLED
-    )
-    
-    cv2.putText(
-        image,
-        label,
-        (labelx, labely + (labelh // 2)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        utils.get_label_scale(image_width),
-        (0, 0, 0),
-        monitor_label_thickness,
-        cv2.LINE_AA
-    )
-    
-    
-
-def drawspendtime(image: cv2.typing.MatLike, spendtime: float):
-    image_height, image_width = image.shape[:2]
-    
-    label: str = f"Latency: {int(spendtime * 1000)}ms"
-    
-    (labelw, labelh), _ = cv2.getTextSize(
-        label,
-        cv2.FONT_HERSHEY_SIMPLEX,
-        utils.get_label_scale(image_width),
-        monitor_label_thickness,
-    )
-    
-    labelx = 0
-    labely = image_height - labelh
-    
-    cv2.rectangle(
-        image,
-        (int(labelx), int(labely - labelh)),
-        (int(labelx + labelw), int(labely + labelh)),
-        (0, 255, 0),
-        cv2.FILLED
-    )
-    
-    cv2.putText(
-        image,
-        label,
-        (labelx, labely + (labelh // 2)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        utils.get_label_scale(image_width),
-        (0, 0, 0),
-        monitor_label_thickness,
-        cv2.LINE_AA
-    )
-
-def drawfps(image: cv2.typing.MatLike, framecount: float):
-    image_height, image_width = image.shape[:2]
-    label: str = f"FPS: {framecount:.1f}"
-    
-    (labelw, labelh), _ = cv2.getTextSize(
-        label,
-        cv2.FONT_HERSHEY_SIMPLEX,
-        utils.get_label_scale(image_width),
-        monitor_label_thickness
-    )
-    
-    labelx = image_width - labelw
-    labely = image_height - labelh
-    
-    cv2.rectangle(
-        image,
-        (int(labelx), int(labely - labelh)),
-        (int(labelx + labelw), int(labely + labelh)),
-        (0, 255, 0),
-        cv2.FILLED
-    )
-    
-    cv2.putText(
-        image,
-        label,
-        (labelx, labely + (labelh // 2)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        utils.get_label_scale(image_width),
-        (0, 0, 0),
-        monitor_label_thickness,
-        cv2.LINE_AA
-    )
-    
 
 def main():
     if (is_display):
@@ -195,8 +73,15 @@ def main():
             cv2.WINDOW_NORMAL
         )
         
+    if (is_async):
+        runtime = loadmodelasync(model_path)
+    else:
+        runtime = loadmodel(model_path)
+    
+    if (runtime is None):
+        logger.error("runtime is undefined")
+        sys.exit()
         
-    runtime = loadmodel(model_path)
     monitor.get_temperature = lambda : runtime.temperature
     monitor.get_information = lambda : runtime.information
     
@@ -216,29 +101,48 @@ def main():
     if (is_display):
         cv2.destroyAllWindows()
         
-def display_inference_files(runtime: Runtime, sample_files: List[str]):
+def display_inference_files(
+    runtime: Union[Runtime, RuntimeAsync],
+    sample_files: List[str]
+):
     index = 0
     max = len(sample_files)
     
     while True:
         sample_file = sample_files[index]
         
+        logger.info(f"start up with {sample_file} at {index}")
+        
         is_image, is_video = utils.filextension(sample_file)
     
         if (is_image):
+            logger.info(f"inference image: {sample_file}")
             display_inference_image(runtime, sample_file)
     
         elif (is_video):
-            display_inference_video(runtime, sample_file)
+            if (is_async and isinstance(runtime, RuntimeAsync)):
+                logger.info(f"inference async video: {sample_file}")
+                display_inference_video_async(runtime, sample_file)
+                
+            elif (not is_async and isinstance(runtime, Runtime)):
+                logger.info(f"inference video: {sample_file}")
+                display_inference_video(runtime, sample_file)
             
         else:
             logger.error(f"sample_file: {sample_file} both not image or video")
         
+        
         if (is_video):
             if (is_loop):
+                
+                if (max > 1):
+                    index = (index + 1) % max
+                    logger.info(f"next video again")
+                
                 key = cv2.waitKeyEx(1)
                 
             else:
+                logger.info(f"wait for key, q = exit, left/right arrow to control prev/next sample files")
                 key = cv2.waitKeyEx(0)
                 
         else:
@@ -254,14 +158,17 @@ def display_inference_files(runtime: Runtime, sample_files: List[str]):
             index = (index + 1) % max
             
 def display_inference_image(runtime: Runtime, filepath: str) -> None:
-    logger.debug(filepath)
+    logger.info(filepath)
     
     input_image = utils.read_image(filepath)
     
     result = runtime.inference(
-        input_image,
-        confidence,
-        threshold
+        InferenceSource(
+            input_image,
+            confidence,
+            threshold,
+            time.time()
+        )
     )
     
     if (is_display):
@@ -277,17 +184,20 @@ def display_inference_video(runtime: Runtime, filepath: str) -> None:
             break
         
         result = runtime.inference(
-            frame,
-            confidence,
-            threshold
+            InferenceSource(
+                frame,
+                confidence,
+                threshold,
+                time.time()
+            )
         )
         
         if (is_monitor):
             monitor.add_count()
             monitor.add_spendtime(result.spendtime)
-            drawmodelname(result.image, runtime.information.name)
-            drawspendtime(result.image, monitor.spandtime)
-            drawfps(result.image, monitor.framecount)
+            utils.drawmodelname(result.image, runtime.information.name)
+            utils.drawspendtime(result.image, monitor.spandtime)
+            utils.drawfps(result.image, monitor.framecount)
         
         if (is_display):
             cv2.imshow(windowname, result.image)
@@ -310,17 +220,20 @@ def display_inference_url_mjpeg(runtime: Runtime, url: str) -> None:
             continue
         
         result = runtime.inference(
-            frame,
-            confidence,
-            threshold
+            InferenceSource(
+                frame,
+                confidence,
+                threshold,
+                time.time()
+            )
         )
         
         if (is_monitor):
             monitor.add_count()
             monitor.add_spendtime(result.spendtime)
-            drawmodelname(result.image, runtime.information.name)
-            drawspendtime(result.image, monitor.spandtime)
-            drawfps(result.image, monitor.framecount)
+            utils.drawmodelname(result.image, runtime.information.name)
+            utils.drawspendtime(result.image, monitor.spandtime)
+            utils.drawfps(result.image, monitor.framecount)
         
         if (is_display):
             cv2.imshow(windowname, result.image)
@@ -328,5 +241,85 @@ def display_inference_url_mjpeg(runtime: Runtime, url: str) -> None:
             if key == ord('q') or key == ord('Q'):
                 break
            
+def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
+    
+    f_feed = True
+    
+    def __task_feed_video():
+        capture = utils.read_video(filepath)
+        
+        while capture.isOpened() and f_feed:
+            ret, frame = capture.read()
+            if (not ret):
+                break
+            
+            while not runtime.avaliable():
+                time.sleep(0.001)
+                continue
+                
+            runtime.put(
+                InferenceSource(
+                    frame,
+                    confidence,
+                    threshold,
+                    time.time()
+                )
+            )
+
+        capture.release()
+
+    t_feed = threading.Thread(target=__task_feed_video, daemon=True)
+    t_feed.start()    
+    
+    t_run = threading.Thread(target=runtime.start, daemon=True)
+    t_run.start()
+    
+    logger.info(f"wait for first frame ")
+    while runtime.get() is None:
+        time.sleep(0.001)
+        continue
+    
+    logger.info(f"start showing inference results")
+    while True:
+        result = runtime.get()
+        
+        # logger.debug(f"runtime.get: {result}")
+        if result is None:
+            # logger.debug(f"result is None")
+            time.sleep(0.001)
+            continue
+        
+        if (is_monitor):
+            monitor.add_count()
+            monitor.add_spendtime(result.spendtime)
+            utils.drawmodelname(result.image, runtime.information.name)
+            utils.drawspendtime(result.image, monitor.spandtime)
+            utils.drawfps(result.image, monitor.framecount)
+        
+        if (is_display):
+            cv2.imshow(windowname, result.image)
+            key = cv2.waitKeyEx(1)
+            if key == ord('q') or key == ord('Q'):
+                break
+            
+        if (not t_feed.is_alive()):
+            break
+          
+    
+    # if (is_display):
+    #     while True:
+    #         result = runtime.get()
+    #         if (result is None):
+    #             break
+            
+    #         cv2.imshow(windowname, result.image)
+    
+    logger.info(f"wait for task ...")
+    f_feed = False
+    runtime.stop()
+    t_run.join(1)
+    t_feed.join(1)
+    logger.info(f"wait for task ok")
+
 if __name__ == "__main__":
     main()
