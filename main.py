@@ -88,6 +88,8 @@ def main():
     monitor.get_temperature = lambda : runtime.temperature
     monitor.get_information = lambda : runtime.information
     
+    runtime.display = True if is_display else False
+    
     if (is_monitor):
         monitor.start()
     
@@ -112,53 +114,59 @@ def display_inference_files(
     max = len(sample_files)
     
     while True:
-        sample_file = sample_files[index]
         
-        logger.info(f"start up with {sample_file} at {index}")
-        
-        is_image, is_video = utils.filextension(sample_file)
-    
-        if (is_image):
-            logger.info(f"inference image: {sample_file}")
-            display_inference_image(runtime, sample_file)
-    
-        elif (is_video):
-            if (is_async and isinstance(runtime, RuntimeAsync)):
-                logger.info(f"inference async video: {sample_file}")
-                display_inference_video_async(runtime, sample_file)
-                
-            elif (not is_async and isinstance(runtime, Runtime)):
-                logger.info(f"inference video: {sample_file}")
-                display_inference_video(runtime, sample_file)
+        try:
+            sample_file = sample_files[index]
             
-        else:
-            logger.error(f"sample_file: {sample_file} both not image or video")
+            logger.info(f"start up with {sample_file} at {index}")
+            
+            is_image, is_video = utils.filextension(sample_file)
         
+            if (is_image):
+                logger.info(f"inference image: {sample_file}")
+                display_inference_image(runtime, sample_file)
         
-        if (is_video):
-            if (is_loop):
-                
-                if (max > 1):
-                    index = (index + 1) % max
-                    logger.info(f"next video again")
-                
-                key = cv2.waitKeyEx(1)
+            elif (is_video):
+                if (is_async and isinstance(runtime, RuntimeAsync)):
+                    logger.info(f"inference async video: {sample_file}")
+                    display_inference_video_async(runtime, sample_file)
+                    
+                elif (not is_async and isinstance(runtime, Runtime)):
+                    logger.info(f"inference video: {sample_file}")
+                    display_inference_video(runtime, sample_file)
                 
             else:
-                logger.info(f"wait for key, q = exit, left/right arrow to control prev/next sample files")
-                key = cv2.waitKeyEx(0)
-                
-        else:
-            key = cv2.waitKeyEx(0)
-        
-        if key == ord('q') or key == ord('Q'):
-            break
-
-        elif key == 65361:  # Left Arrow
-            index = (index - 1 + max) % max
+                logger.error(f"sample_file: {sample_file} both not image or video")
             
-        elif key == 65363:  # Right Arrow
-            index = (index + 1) % max
+            
+            if (is_video):
+                if (is_loop):
+                    
+                    if (max > 1):
+                        index = (index + 1) % max
+                        logger.info(f"next video again")
+                    
+                    key = cv2.waitKeyEx(1)
+                    
+                else:
+                    logger.info(f"wait for key, q = exit, left/right arrow to control prev/next sample files")
+                    key = cv2.waitKeyEx(0)
+                    
+            else:
+                key = cv2.waitKeyEx(0)
+            
+            if key == ord('q') or key == ord('Q'):
+                break
+
+            elif key == 65361:  # Left Arrow
+                index = (index - 1 + max) % max
+                
+            elif key == 65363:  # Right Arrow
+                index = (index + 1) % max
+        
+        except Exception as e:
+            logger.error(e)
+            
             
 def display_inference_image(runtime: Runtime, filepath: str) -> None:
     logger.info(filepath)
@@ -199,8 +207,8 @@ def display_inference_video(runtime: Runtime, filepath: str) -> None:
             monitor.add_count()
             monitor.add_spendtime(result.spendtime)
             utils.drawmodelname(result.image, runtime.information.name)
-            utils.drawspendtime(result.image, monitor.spandtime)
-            utils.drawfps(result.image, monitor.framecount)
+            utils.drawlatency(result.image, monitor.latency)
+            utils.drawfps(result.image, monitor.fps)
         
         if (is_display):
             cv2.imshow(windowname, result.image)
@@ -235,8 +243,8 @@ def display_inference_url_mjpeg(runtime: Runtime, url: str) -> None:
             monitor.add_count()
             monitor.add_spendtime(result.spendtime)
             utils.drawmodelname(result.image, runtime.information.name)
-            utils.drawspendtime(result.image, monitor.spandtime)
-            utils.drawfps(result.image, monitor.framecount)
+            utils.drawlatency(result.image, monitor.latency)
+            utils.drawfps(result.image, monitor.fps)
         
         if (is_display):
             cv2.imshow(windowname, result.image)
@@ -251,6 +259,7 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
     pool = ThreadPoolExecutor()
     
     def __task_put_source(frame: cv2.typing.MatLike):
+        
         runtime.put(
             InferenceSource(
                 frame,
@@ -274,14 +283,14 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
             
             pool.submit(__task_put_source, frame)
                 
-            runtime.put(
-                InferenceSource(
-                    frame,
-                    confidence,
-                    threshold,
-                    time.time()
-                )
-            )
+            # runtime.put(
+            #     InferenceSource(
+            #         frame,
+            #         confidence,
+            #         threshold,
+            #         time.time()
+            #     )
+            # )
 
         capture.release()
 
@@ -298,24 +307,25 @@ def display_inference_video_async(runtime: RuntimeAsync, filepath: str) -> None:
     
     logger.info(f"start showing inference results")
     while True:
+        lasttime = 0
         result = runtime.get()
         
         # logger.debug(f"runtime.get: {result}")
         if result is None:
             # logger.debug(f"result is None")
-            time.sleep(0.001)
+            # time.sleep(0.001)
             continue
+        
+        
         
         if (is_monitor):
             monitor.add_count()
             monitor.add_spendtime(result.spendtime)
+            runtime.spendtime = monitor.latency
+            runtime.fps = monitor.fps
 
-            if (is_display):
-                utils.drawmodelname(result.image, runtime.information.name)
-                utils.drawspendtime(result.image, monitor.spandtime)
-                utils.drawfps(result.image, monitor.framecount)
-        
-        if (is_display):
+        if (is_display and result.timestamp > lasttime):
+            lasttime = result.timestamp
             
             cv2.imshow(windowname, result.image)
             key = cv2.waitKeyEx(1)
