@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import pathlib
 import re
@@ -12,8 +13,8 @@ ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 def clean_ansi(line: str) -> str:
     return ansi_escape.sub('', line)
 
-def find_hef_files():
-    return sorted(HEF_ROOT.glob("**/hailo-8l-hef/*.hef"))
+def find_hef_files(dir: str):
+    return sorted(pathlib.Path(dir).glob("*.hef"))
 
 def print_progress(line: str):
     line = clean_ansi(line)
@@ -57,7 +58,18 @@ def run_benchmark(hef_path: pathlib.Path) -> str:
         return f"{hef_path.name}: [Error: {e}]"
 
 def main():
-    hef_files = find_hef_files()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--model-path", type=str, default="", help="model path")
+
+    args = parser.parse_args()
+    
+    if (not args.model_path):
+        parser.print_help()
+        return None
+        
+    
+    hef_files = find_hef_files(args.model_path)
+    
     with open(OUTPUT_LOG, "w") as log_file:
         for hef_path in hef_files:
             print(f"Benchmarking {hef_path.name} ...")

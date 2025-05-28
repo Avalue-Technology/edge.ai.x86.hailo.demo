@@ -101,6 +101,10 @@ def main():
     
     args = parser.parse_args()
     
+    if (not args.model_path):
+        parser.print_help()
+        return None
+    
     hef_files = find_hef_files(args.model_path)
     
     with open(OUTPUT_LOG, "w") as log_file:
