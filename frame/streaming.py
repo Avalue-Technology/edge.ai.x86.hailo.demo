@@ -40,7 +40,7 @@ class Streaming():
         return self._framecount
     
     @property
-    def avaliable(self) -> bool:
+    def avaliable(self) -> int:
         return self._queue_frame.avaliable
 
     def put(self, frame: cv2.typing.MatLike) -> int:

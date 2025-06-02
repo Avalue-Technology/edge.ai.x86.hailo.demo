@@ -57,7 +57,7 @@ class Sample(Streaming):
             err = 0
 
             # logger.debug(f"wait for streaming buffer avaliable ...{self.avaliable}")
-            while(not self.avaliable):
+            while(self.avaliable < 1):
                 time.sleep(0.001)
                 err += 1
                 continue
@@ -84,7 +84,7 @@ class Sample(Streaming):
         self._fileindex = 0
         self._file = self._files[self._fileindex]
         
-        self._name = f"Sample file: {self._file}"
+        self._name = f"Sample file: {self._filepath}"
         
         return self
         
@@ -96,20 +96,18 @@ class Sample(Streaming):
         self._fileindex = 0
         self._file = self._files[self._fileindex]
         
-        self._name = f"Sample file: {self._file}"
+        self._name = f"Sample file: {self._filepath}"
         
         return self
         
     def next(self) -> None:
         self._fileindex = (self._fileindex + 1) % self._filelength
         self._file = self._files[self._fileindex]
-        self._name = f"Sample file: {self._file}"
         
         
     def prev(self) -> None:
         self._fileindex = (self._fileindex - 1 + self._filelength) % self._filelength
         self._file = self._files[self._fileindex]
-        self._name = f"Sample file: {self._file}"
     
     def start(self) -> None:
         self._streaming_running.set()

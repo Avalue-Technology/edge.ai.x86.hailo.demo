@@ -70,7 +70,7 @@ class Random(Streaming):
 
             err = 0
             # logger.debug(f"wait for streaming buffer avaliable ...{self.avaliable}")
-            while(not self.avaliable):
+            while(self.avaliable < 1):
                 time.sleep(0.001)
                 err += 1
                 continue

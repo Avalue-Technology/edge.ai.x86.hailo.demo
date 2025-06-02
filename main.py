@@ -109,12 +109,13 @@ def showasync(
     def __task_feed__():
         
         logger.info(f"streaming feed start {f_feed}")
-        
-        while f_feed.is_set():
+        frame = None
+        while True:
+            f_feed.wait()
             time.sleep(0.001)
 
             feederr = 0
-            while(f_feed.is_set() and feederr < 10000):
+            while(f_feed.is_set() and feederr < 1000):
                 frame = streaming.get()
                 if frame is None:
                     feederr += 1
@@ -125,11 +126,11 @@ def showasync(
                     feederr = 0
                     break
                 
-            if(feederr >= 10000):
-                logger.error(f"frame capture on error")
+            if(feederr >= 1000):
+                # logger.error(f"frame capture on error")
                 break
                 
-            while(f_feed.is_set() and not runtime.avaliable):
+            while(f_feed.is_set() and runtime.avaliable < 1):
                 time.sleep(0.001)
                 
             runtime.put(
@@ -140,24 +141,123 @@ def showasync(
                     time.time(),
                 )
             )
-            
+                
         logger.info(f"streaming feed stop {f_feed}")
     
     f_feed.set()
     t_feed = threading.Thread(target=__task_feed__, daemon=True)
     t_feed.start()
     
+    
+    f_run = threading.Event()
+    f_run.set()
+    
     t_run = threading.Thread(target=runtime.run, daemon=True)
     t_run.start()
     
     err = 0
     last = 0
-    while(err < 10000):
+    while(f_run.is_set() and err < 10000):
+        
+        if(runtime.avaliable < 3):
+            f_feed.clear()
+        else:
+            f_feed.set()
+        
         result = runtime.get()
         if(result is None):
             time.sleep(0.001)
             err += 1
             continue
+        
+        
+        runtime.add_count()
+        runtime.add_spendtime(result.spendtime)
+        
+        if (args.display and result.timestamp > last):
+            last = result.timestamp
+            image = result.image
+            
+            utils.drawmodelname(image=image, name=runtime.information.name)
+            utils.drawlatency(image=image, spendtime=runtime.latency)
+            utils.drawfps(image=image, framecount=runtime.fps)
+            utils.drawsize(image=image, width=image.shape[1], height=image.shape[0])
+            
+            window_show(windowname, result.image)
+            key = window_waitkey(1)
+            if key == KEY_Q or key == KEY_q:
+                break
+        
+        err = 0
+                    
+        if (not t_feed.is_alive()):
+            break
+        
+    if (err > 0):
+        logger.error(f"terminate show async err:{err}")
+    
+    runtime.clear()
+    runtime.stop()
+    
+    f_run.clear()
+    t_run.join(1)
+    
+    f_feed.clear()
+    t_feed.join(1)
+    
+    logger.info(f"runtime stop: {t_run.is_alive()}")
+    # logger.info(f"feed stop: {t_feed.is_alive()}")
+    
+
+def showasync1(
+    args: Arguments,
+    windowname: str,
+    runtime: RuntimeAsync,
+    streaming: Streaming,
+):
+    
+    f_run = threading.Event()
+    f_run.set()
+    
+    t_run = threading.Thread(target=runtime.run, daemon=True)
+    t_run.start()
+    
+    err = 0
+    last = 0
+    while(f_run.is_set() and err < 10000):
+        
+        while(f_run.is_set() and err < 10000):
+            frame = streaming.get()
+            if(frame is None):
+                time.sleep(0.001)
+                err += 1
+                
+            else:
+                break
+        err = 0
+        
+        while(f_run.is_set() and err < 10000 and not runtime.avaliable):
+            time.sleep(0.001)
+            err += 1
+        err = 0
+        
+        runtime.put(
+            InferenceSource(
+                frame,
+                args.confidence,
+                args.threshold,
+                time.time()
+            )
+        )
+        
+        while(f_run.is_set() and err < 10000):
+            result = runtime.get()
+            if(result is None):
+                time.sleep(0.001)
+                err += 1
+            
+            else:
+                break
         err = 0
         
         runtime.add_count()
@@ -177,21 +277,23 @@ def showasync(
             if key == KEY_Q or key == KEY_q:
                 break
                 
-        if (not t_feed.is_alive()):
-            break
+        # if (not t_feed.is_alive()):
+        #     break
         
     if (err > 0):
         logger.error(f"terminate show async err:{err}")
     
     runtime.clear()
     runtime.stop()
+    
+    f_run.clear()
     t_run.join(1)
     
-    f_feed.clear()
-    t_feed.join(1)
+    # f_feed.clear()
+    # t_feed.join(1)
     
     logger.info(f"runtime stop: {t_run.is_alive()}")
-    logger.info(f"feed stop: {t_feed.is_alive()}")
+    # logger.info(f"feed stop: {t_feed.is_alive()}")
 
 def show(
     args: Arguments,
