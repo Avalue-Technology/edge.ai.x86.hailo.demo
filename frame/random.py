@@ -69,25 +69,18 @@ class Random(Streaming):
             frame = self._frames[index]
 
             err = 0
-            # logger.debug(f"wait for streaming buffer avaliable ...{self.avaliable}")
             while(self.avaliable < 1):
                 time.sleep(0.001)
                 err += 1
                 continue
-            # logger.debug(f"wait for streaming buffer avaliable ok {self.avaliable}")
             
             self.put(frame)
             self.__add_framecount__()
             
-            # if (err > 0):
-            #     logger.warning(f"add latency: {err}ms")
-            
             err = 0
-            
             index = (index + 1) % self._length
             
         self.clear()
-        
         logger.info("stop streaming random frames")
             
     def start(self) -> None:

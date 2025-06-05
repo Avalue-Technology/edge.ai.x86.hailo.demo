@@ -6,6 +6,8 @@ from dataclasses import dataclass
 @dataclass
 class Arguments:
     
+    debug_leaks: bool = False
+    
     sample_path: str = ""
     sample_mjpeg: str = ""
     

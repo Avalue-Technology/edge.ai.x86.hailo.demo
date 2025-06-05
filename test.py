@@ -2,10 +2,16 @@
 import logging
 import time
 
-import cv2
-
 from frame.random import Random
+from sdk.data.circular_buffer import CircularBuffer
 
+
+from pympler import muppy, summary, tracker, classtracker
+import gc
+
+mem_tracker = tracker.SummaryTracker()
+buffer_tracker = classtracker.ClassTracker()
+buffer_tracker.track_class(CircularBuffer)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -14,33 +20,34 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-windowname = __name__
+streaming = Random(1920, 1080, 100)
+buffer = CircularBuffer(100)
+buffer_tracker.create_snapshot()
 
+mem_tracker.print_diff()
 
-cv2.namedWindow(
-    windowname,
-    cv2.WINDOW_NORMAL
-)
+streaming.start()
 
-cv2.setWindowProperty(
-    windowname,
-    cv2.WND_PROP_FULLSCREEN,
-    cv2.WINDOW_GUI_EXPANDED, #cv2.WINDOW_FULLSCREEN, 
-)
-
-
-# c = VideoCapture("/home/avalue/hailodemo/sdk/samples/videos/20200229174849.mp4")
-c = Random(640, 640)
-c.start()
-
-while(True):
+l = 10000
+while l > 0:
     
-    frame = c.get()
-    if (frame is None):
+    f = streaming.get()
+    if f is None:
         time.sleep(0.001)
         continue
         
-    # cv2.imshow(windowname, frame)
-    # cv2.waitKeyEx(delay=1)
+    if buffer.avaliable > 1:
+        buffer.put(f)
+        
+    else:
+        buffer.get()
+        
+    # if (l % 100 == 0):
+    #     logger.debug(f"... {l}")
+        
+    buffer_tracker.stats.print_summary()
+    l -= 1
 
-cv2.destroyAllWindows()
+buffer.clear()
+mem_tracker.print_diff()
+streaming.stop()
