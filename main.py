@@ -74,18 +74,10 @@ def window_show(name: str, frame: cv2.typing.MatLike):
     cv2.imshow(name, frame)
 
 def initruntime(args: Arguments) -> Union[Runtime, RuntimeAsync]:
-    runtime = None
-    if (args.model_path):
-
-        runtime = loadmodel(args.model_path)
-        if (isinstance(runtime, RuntimeAsync)):
-            runtime.size = args.streaming_size
+    runtime = loadmodel(args)
+    if (isinstance(runtime, RuntimeAsync)):
+        runtime.size = args.streaming_size
             
-    if (runtime is None):
-        logger.error(f"no model path. see --help ")
-        sys.exit()
-    
-    runtime.display = args.display
     return runtime
 
 def initstreaming(args: Arguments) -> Streaming:
@@ -185,7 +177,7 @@ def showasync(
         else:
             f_feed.set()
         
-        result = runtime.get()
+        result: InferenceResult = runtime.get()
         if(result is None):
             time.sleep(0.001)
             err += 1
@@ -228,9 +220,6 @@ def showasync(
     
     logger.info(f"runtime stop: {t_run.is_alive()}")
     # logger.info(f"feed stop: {t_feed.is_alive()}")
-    
-    
-    
 
 def show(
     args: Arguments,
@@ -282,10 +271,10 @@ def show(
             
 def main(args: Arguments):
     
-    if (args.debug_leaks):
-        tk = tracker.SummaryTracker()
-        hp = guppy.hpy()
-        hp.setrelheap()
+    # if (args.debug_leaks):
+    #     tk = tracker.SummaryTracker()
+    #     hp = guppy.hpy()
+    #     hp.setrelheap()
     
     logger.info(args.__dict__)
     
@@ -336,24 +325,23 @@ def main(args: Arguments):
         streaming.stop()
         monitor.stop()
         
-        
-        # unreachable = gc.collect()
-        # logger.debug(f"Unreachable objects: {unreachable}")
-        # logger.debug(f"Garbage objects: {len(gc.garbage)}")
-        # for i, obj in enumerate(gc.garbage):
-        #     logger.debug(f"    [{i}] type={type(obj)} repr={repr(obj)[:100]}")
-        
-        # monitor.dump_objects()
-        
         if (args.debug_leaks):
             try:
-                tk.print_diff()
-                items = hp.heap()[:10]
-                for i in range(len(items)):
-                    logger.debug(f"===== item[{i}]: kind: {items[i].kind} =====")
-                    logger.debug(f"\nbyvia: {items[i].byvia}")
-                    # logger.debug(f"\nshpaths: {items[i].shpaths}")
-                    # logger.debug(f"\nrp: {items[i].rp}")
+                unreachable = gc.collect()
+                logger.debug(f"Unreachable objects: {unreachable}")
+                logger.debug(f"Garbage objects: {len(gc.garbage)}")
+                for i, obj in enumerate(gc.garbage):
+                    logger.debug(f"    [{i}] type={type(obj)} repr={repr(obj)[:100]}")
+                
+                monitor.dump_objects()
+                
+                # tk.print_diff()
+                # items = hp.heap()[:10]
+                # for i in range(len(items)):
+                #     logger.debug(f"===== item[{i}]: kind: {items[i].kind} =====")
+                #     logger.debug(f"\nbyvia: {items[i].byvia}")
+                #     logger.debug(f"\nshpaths: {items[i].shpaths}")
+                #     logger.debug(f"\nrp: {items[i].rp}")
                     
             except:
                 logger.warning("debug memory leaks failed")
@@ -394,12 +382,12 @@ if __name__ == "__main__":
     parser.add_argument("--display", action="store_true", help="display inference results")
     parser.add_argument("--monitor", action="store_true", help="monitor inference frame per second when input sample is video")
     parser.add_argument("--loop", action="store_true", help="loop forever when input sample is video")
-    parser.add_argument("--no-inference", action="store_true", help="no inference consumer")
     parser.add_argument("--sample-random", action="store_true", help="auto generate random buffer array as inference source")
     parser.add_argument("--sample-random-width", type=int, default=320, help="with --sample-random buffer width size")
     parser.add_argument("--sample-random-height", type=int, default=320, help="with --sample-random buffer height size")
 
-    parser.add_argument("--debug-leaks", type=bool, default=False)
+    parser.add_argument("--no-inference", action="store_true", help="no inference consumer")
+    parser.add_argument("--debug-leaks", action="store_true")
 
     args = parser.parse_args()
     main(Arguments(**vars(args)))
