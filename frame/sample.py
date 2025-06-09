@@ -103,11 +103,12 @@ class Sample(Streaming):
     def next(self) -> None:
         self._fileindex = (self._fileindex + 1) % self._filelength
         self._file = self._files[self._fileindex]
-        
+        logger.debug(f"[{self._fileindex}]: {self._file}")
         
     def prev(self) -> None:
         self._fileindex = (self._fileindex - 1 + self._filelength) % self._filelength
         self._file = self._files[self._fileindex]
+        logger.debug(f"[{self._fileindex}]: {self._file}")
     
     def start(self) -> None:
         self._streaming_running.set()

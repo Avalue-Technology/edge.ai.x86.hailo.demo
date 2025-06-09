@@ -6,8 +6,6 @@ from dataclasses import dataclass
 @dataclass
 class Arguments:
     
-    debug_leaks: bool = False
-    
     sample_path: str = ""
     sample_mjpeg: str = ""
     
@@ -17,7 +15,6 @@ class Arguments:
     threshold: int = 10
     
     display: bool = False
-    monitor: bool = True
     loop: bool = False
     
     streaming_size: int = 8
