@@ -15,6 +15,7 @@ class Arguments:
     threshold: int = 10
     
     display: bool = False
+    full_screen: bool = False
     loop: bool = False
     
     streaming_size: int = 8

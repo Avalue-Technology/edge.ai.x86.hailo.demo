@@ -39,16 +39,17 @@ KEY_Q = ord('Q')
 KEY_ARROW_LEFT = 65361
 KEY_ARROW_RIGHT = 65363
 
-def window_init(name: str):
+def window_init(name: str, args: Arguments):
     cv2.namedWindow(
         name,
         cv2.WINDOW_NORMAL
     )
     
+    
     cv2.setWindowProperty(
         name,
         cv2.WND_PROP_FULLSCREEN,
-        cv2.WINDOW_FREERATIO, # cv2.WINDOW_FULLSCREEN, 
+        cv2.WINDOW_FULLSCREEN if args.full_screen else cv2.WINDOW_FREERATIO, 
     )
     
 def window_close():
@@ -265,7 +266,7 @@ def main(args: Arguments):
     windowname = f"{streaming.name}"
     
     if (args.display):
-        window_init(windowname)
+        window_init(windowname, args)
     
     logger.info(f"startup {windowname}")
     while(True):
@@ -336,6 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=int, default=50, help="nms filter threshold")
     parser.add_argument("--streaming-size", type=int, default=64, help="the limit of video streaming buffer size")
     parser.add_argument("--display", action="store_true", help="display inference results")
+    parser.add_argument("--full-screen", action="store_true", help="display inference results in full screen mode")
     parser.add_argument("--loop", action="store_true", help="loop forever when input sample is video")
     parser.add_argument("--sample-random", action="store_true", help="auto generate random buffer array as inference source")
     parser.add_argument("--sample-random-width", type=int, default=320, help="with --sample-random buffer width size")
