@@ -37,7 +37,6 @@ def run_inference(hef_path: pathlib.Path, video_path: str) -> str:
         "./main.py",
         f"--model-path={hef_path}",
         f"--sample-path={video_path}",
-        f"--monitor",
     ]
 
     proc = subprocess.Popen(
@@ -96,12 +95,12 @@ def run_inference(hef_path: pathlib.Path, video_path: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--model-path", type=str, default="", help="model path")
-    parser.add_argument("-v", "--sample-video", type=str, default="", help="sample video file path")
+    parser.add_argument("-m", "--model-path", type=str, default="", help="ex: sdk/models/object-detection/yolo/hailo-8-hef")
+    parser.add_argument("-v", "--sample-video", type=str, default="", help="ex: sdk/samples/videos/test.mp4")
     
     args = parser.parse_args()
     
-    if (not args.model_path):
+    if (not args.model_path or not args.sample_video):
         parser.print_help()
         return None
     

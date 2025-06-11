@@ -1,3 +1,4 @@
+import argparse
 import itertools
 import queue
 import subprocess
@@ -10,15 +11,14 @@ import shutil
 
 from datetime import datetime
 
-HEF_DIR = pathlib.Path("sdk/models/object-detection")
 OUTPUT_LOG = "benchmark_results.log"
-VIDEO_MP4_PATH = "sdk/samples/videos/20200229174849.mp4"
+VIDEO_MP4_PATH = "sdk/samples/videos/test.mp4"
 TIMEOUT_SECONDS = 180
 
-def find_hef_files():
+def find_model_files(dir: str):
     return sorted(itertools.chain(
-            HEF_DIR.glob("**/tflite/*.tflite"),
-            HEF_DIR.glob("**/onnx/*.onnx")
+            pathlib.Path(dir).glob("**/tflite/*.tflite"),
+            pathlib.Path(dir).glob("**/onnx/*.onnx")
         )
     )
 
@@ -38,15 +38,12 @@ def print_progress(percent: float, last_line: str, bar_ratio = 0.3):
     sys.stdout.write(f"\r{progress} {trimmed_line}")
     sys.stdout.flush()
 
-def run_inference(hef_path: pathlib.Path) -> str:
+def run_inference(model_path: pathlib.Path) -> str:
     cmd = [
         "python3",
         "./main.py",
-        "-c=10",
-        "-t=10",
-        "-f",
-        f"-spath={VIDEO_MP4_PATH}",
-        f"-m={hef_path}"
+        f"--sample-path={VIDEO_MP4_PATH}",
+        f"--model-path={model_path}"
     ]
 
     proc = subprocess.Popen(
@@ -89,24 +86,35 @@ def run_inference(hef_path: pathlib.Path) -> str:
             if elapsed > TIMEOUT_SECONDS:
                 proc.kill()
                 print_progress(100, "[Timeout]")
-                return f"{hef_path.name}: {output_lines[-1]}"
+                return f"{model_path.name}: {output_lines[-1]}"
 
         last_line = output_lines[-1] if output_lines else "[No output]"
         print_progress(100, last_line)
         
-        return f"{hef_path.name}: {output_lines[-1]}"
+        return f"{model_path.name}: {output_lines[-1]}"
     
     except Exception as e:
         proc.kill()
         print_progress(100, f"[Error: {e}]")
-        return f"{hef_path.name}: [Error: {e}]"
+        return f"{model_path.name}: [Error: {e}]"
 
 def main():
-    hef_files = find_hef_files()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--model-path", type=str, default="", help="ex: sdk/models/object-detection")
+    parser.add_argument("-v", "--sample-video", type=str, default="", help="ex: sdk/samples/videos/test.mp4")
+
+    args = parser.parse_args()
+    
+    if (not args.model_path or not args.sample_video):
+        parser.print_help()
+        return None
+    
+    model_files = find_model_files(args.model_path)
+    
     with open(OUTPUT_LOG, "w") as log_file:
-        for hef_path in hef_files:
-            print(f"\nRunning {hef_path.name}")
-            result = run_inference(hef_path)
+        for model_path in model_files:
+            print(f"\nRunning {model_path.name}")
+            result = run_inference(model_path)
             log_file.write(result + "\n")
         print()  # newline after last progress bar
 

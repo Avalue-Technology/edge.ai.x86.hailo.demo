@@ -26,7 +26,6 @@ from sdk import loadmodel
 from frame.streaming import Streaming
 from frame.random import Random
 
-
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(threadName)10s %(levelname)5s] %(filename)s.%(funcName)s:%(lineno)d: %(message)s"

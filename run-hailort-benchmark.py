@@ -59,7 +59,7 @@ def run_benchmark(hef_path: pathlib.Path) -> str:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--model-path", type=str, default="", help="model path")
+    parser.add_argument("-m", "--model-path", type=str, default="", help="ex: sdk/models/object-detection/yolo/hailo-8-hef")
 
     args = parser.parse_args()
     
@@ -67,7 +67,6 @@ def main():
         parser.print_help()
         return None
         
-    
     hef_files = find_hef_files(args.model_path)
     
     with open(OUTPUT_LOG, "w") as log_file:
