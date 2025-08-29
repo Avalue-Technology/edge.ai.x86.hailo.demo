@@ -12,13 +12,12 @@ import shutil
 from datetime import datetime
 
 OUTPUT_LOG = "benchmark_results.log"
-VIDEO_MP4_PATH = "sdk/samples/videos/test.mp4"
-TIMEOUT_SECONDS = 180
+TIMEOUT_SECONDS = 120
 
 def find_model_files(dir: str):
     return sorted(itertools.chain(
-            pathlib.Path(dir).glob("**/tflite/*.tflite"),
-            pathlib.Path(dir).glob("**/onnx/*.onnx")
+            pathlib.Path(dir).glob("*.tflite"),
+            pathlib.Path(dir).glob("*.onnx")
         )
     )
 
@@ -38,12 +37,12 @@ def print_progress(percent: float, last_line: str, bar_ratio = 0.3):
     sys.stdout.write(f"\r{progress} {trimmed_line}")
     sys.stdout.flush()
 
-def run_inference(model_path: pathlib.Path) -> str:
+def run_inference(model_path: pathlib.Path, video_path: str) -> str:
     cmd = [
         "python3",
         "./main.py",
-        f"--sample-path={VIDEO_MP4_PATH}",
-        f"--model-path={model_path}"
+        f"--model-path={model_path}",
+        f"--sample-path={video_path}",
     ]
 
     proc = subprocess.Popen(
@@ -88,11 +87,13 @@ def run_inference(model_path: pathlib.Path) -> str:
                 print_progress(100, "[Timeout]")
                 return f"{model_path.name}: {output_lines[-1]}"
 
-        last_line = output_lines[-1] if output_lines else "[No output]"
+        last_line = next(
+            (line for line in reversed(output_lines) if "fps" in line),
+            "error"
+        )
         print_progress(100, last_line)
-        
-        return f"{model_path.name}: {output_lines[-1]}"
-    
+        return f"{model_path.name}: {last_line}"
+
     except Exception as e:
         proc.kill()
         print_progress(100, f"[Error: {e}]")
@@ -114,8 +115,9 @@ def main():
     with open(OUTPUT_LOG, "w") as log_file:
         for model_path in model_files:
             print(f"\nRunning {model_path.name}")
-            result = run_inference(model_path)
+            result = run_inference(model_path, args.sample_video)
             log_file.write(result + "\n")
+            
         print()  # newline after last progress bar
 
 if __name__ == "__main__":
